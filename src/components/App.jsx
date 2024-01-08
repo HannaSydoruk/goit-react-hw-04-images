@@ -1,4 +1,4 @@
-import { Component } from 'react';
+import { useEffect, useState } from 'react';
 import css from './App.module.css';
 import * as Api from 'api';
 import Searchbar from './Searchbar/Searchbar';
@@ -7,35 +7,28 @@ import Button from './Button/Button';
 import Loader from './Loader/Loader';
 import Modal from './Modal/Modal';
 
-export class App extends Component {
-  state = {
-    images: [],
-    largeImage: '',
-    status: 'idle',
-    searchValue: '',
-    currentPage: 1,
-    error: null,
-    showModal: false,
-    total: 0,
+export const App = () => {
+  const [images, setImages] = useState([]);
+  const [largeImage, setLargeImage] = useState('');
+  const [status, setStatus] = useState('idle');
+  const [searchValue, setSearchValue] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [error, setError] = useState(null);
+  const [showModal, setShowModal] = useState(false);
+  const [total, setTotal] = useState(0);
+
+  const toggleModal = () => {
+    setShowModal(prevState => !prevState);
   };
 
-  toggleModal = () => {
-    this.setState(({ showModal }) => ({
-      showModal: !showModal,
-    }));
-  };
-
-  componentDidUpdate = async (_, prevState) => {
-    if (
-      prevState.searchValue !== this.state.searchValue ||
-      prevState.currentPage !== this.state.currentPage
-    ) {
+  useEffect(() => {
+    async function getImages() {
       try {
-        this.setState({ status: 'pending' });
-        const data = await Api.getImages(
-          this.state.searchValue,
-          this.state.currentPage
-        );
+        if (!searchValue) return;
+
+        setStatus(_ => 'pending');
+
+        const data = await Api.getImages(searchValue, currentPage);
         const images = data.hits.map(hit => {
           return {
             id: hit.id,
@@ -43,59 +36,47 @@ export class App extends Component {
             largeImage: hit.largeImageURL,
           };
         });
-        this.setState(prevState => ({
-          images: [...prevState.images, ...images],
-          status: 'success',
-          total: data.total,
-        }));
+        setImages(prevState => [...prevState, ...images]);
+        setStatus(_ => 'success');
+        setTotal(_ => data.total);
       } catch (error) {
-        this.setState({ error: error.message, status: 'error' });
+        setError(_ => error.message);
+        setStatus(_ => 'error');
       }
     }
-  };
+    getImages();
+  }, [searchValue, currentPage]);
 
-  onSearchSubmit = async formData => {
-    if (formData.searchValue.toLowerCase() === this.state.searchValue) {
+  const onSearchSubmit = async formData => {
+    if (formData.searchValue.toLowerCase() === searchValue) {
       return alert('The query is the same. Change your query.');
     }
-    this.setState({
-      searchValue: formData.searchValue.toLowerCase(),
-      images: [],
-      currentPage: 1,
-    });
+    setSearchValue(_ => formData.searchValue.toLowerCase());
+    setImages(_ => []);
+    setCurrentPage(_ => 1);
   };
 
-  onLoadMoreClick = async e => {
-    this.setState(prevState => ({ currentPage: prevState.currentPage + 1 }));
+  const onLoadMoreClick = async e => {
+    setCurrentPage(prevState => prevState + 1);
   };
 
-  onImageSelected = image => {
-    this.setState({ largeImage: image, showModal: true });
+  const onImageSelected = image => {
+    setLargeImage(_ => image);
+    setShowModal(_ => true);
   };
 
-  render() {
-    return (
-      <div className={css.app}>
-        <Searchbar onSubmit={this.onSearchSubmit} />
-        {this.state.status === 'error' && (
-          <p>Something went wrong. {this.state.error}</p>
-        )}
-        {(this.state.status === 'success' ||
-          this.state.status === 'pending') && (
-          <ImageGallery
-            images={this.state.images}
-            onImageSelected={this.onImageSelected}
-          />
-        )}
-        {this.state.status === 'pending' && <Loader />}
-        {this.state.images?.length >= 12 &&
-          this.state.images?.length < this.state.total && (
-            <Button onLoadMoreClick={this.onLoadMoreClick} />
-          )}
-        {this.state.showModal && (
-          <Modal url={this.state.largeImage} onClose={this.toggleModal} />
-        )}
-      </div>
-    );
-  }
-}
+  return (
+    <div className={css.app}>
+      <Searchbar onSubmit={onSearchSubmit} />
+      {status === 'error' && <p>Something went wrong. {error}</p>}
+      {(status === 'success' || status === 'pending') && (
+        <ImageGallery images={images} onImageSelected={onImageSelected} />
+      )}
+      {status === 'pending' && <Loader />}
+      {images?.length >= 12 && images?.length < total && (
+        <Button onLoadMoreClick={onLoadMoreClick} />
+      )}
+      {showModal && <Modal url={largeImage} onClose={toggleModal} />}
+    </div>
+  );
+};
